@@ -20,7 +20,11 @@ type dbManager struct {
 	dbConfig DbConfig
 }
 
-func (d *dbManager) CreateDbClient(ctx context.Context) (*gorm.DB, error) {
+type DbInstance struct {
+	Db *gorm.DB
+}
+
+func (d *dbManager) CreateDbClient(ctx context.Context) (*DbInstance, error) {
 	db, err := gorm.Open(postgres.Open(d.dbConfig.WriteDsn), &gorm.Config{
 		TranslateError: true,
 		Logger:         logger.Default.LogMode(logger.Info),
@@ -45,7 +49,9 @@ func (d *dbManager) CreateDbClient(ctx context.Context) (*gorm.DB, error) {
 			SetMaxOpenConns(200),
 	)
 
-	return db, err
+	return &DbInstance{
+		Db: db,
+	}, err
 }
 
 func NewDbManager(dbConfig DbConfig) *dbManager {
