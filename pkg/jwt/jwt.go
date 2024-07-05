@@ -83,25 +83,25 @@ type NewJwtServiceParams struct {
 	PrivateKey string
 }
 
-func NewJwtService(p NewJwtServiceParams) (JwtService, error) {
+func NewJwtService(p NewJwtServiceParams) JwtService {
 
 	publicKey, err := go_jwt.ParseRSAPublicKeyFromPEM([]byte(p.PublicKey))
 	if err != nil {
 		log.Errorf("[JWT][NewJwtService] error parse public key: %v", err)
-		return nil, err
+		panic(err)
 	}
 
 	privateKey, err := go_jwt.ParseRSAPrivateKeyFromPEM([]byte(p.PrivateKey))
 	if err != nil {
 		log.Errorf("[JWT][NewJwtService] error parse private key: %v", err)
-		return nil, err
+		panic(err)
 	}
 
 	return &jwtService{
 		publicKey:  publicKey,
 		privateKey: privateKey,
 		redis:      p.Redis,
-	}, nil
+	}
 }
 
 func (s *jwtService) GenerateToken(ctx context.Context, p GenerateTokenParams) (*GenerateTokenResponse, error) {

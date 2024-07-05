@@ -65,6 +65,6 @@ func (r *randomizer) GenerateUUID() string {
 	return uuid.NewString()
 }
 
-func NewRandomizer() *randomizer {
+func NewRandomizer() RandomizerService {
 	return &randomizer{}
 }

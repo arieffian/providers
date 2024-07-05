@@ -148,7 +148,7 @@ func (r *RedisClient) GetKeysByPattern(ctx context.Context, pattern string) ([]s
 	return res, nil
 }
 
-func NewRedisConnection(cfg RedisConfig) *RedisClient {
+func NewRedisConnection(cfg RedisConfig) RedisService {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password: "",

@@ -222,7 +222,7 @@ func (c *crypt) PasswordVerify(password string, hash string) (bool, error) {
 		log.Errorf("[Crypt][PasswordVerify] error decode salt: %v", err)
 		return false, err
 	}
-	p.saltLength = uint32(len(salt))
+	// p.saltLength = uint32(len(salt))
 
 	hashedPwd, err := b64.RawStdEncoding.Strict().DecodeString(vals[5])
 	if err != nil {
