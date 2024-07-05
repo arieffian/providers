@@ -56,13 +56,13 @@ func NewSSHTunnel(config SSHTunnelConfig) SSHTunnelService {
 			decodedPrivateKey, err := base64.StdEncoding.DecodeString(config.PrivateKey)
 			if err != nil {
 				fmt.Printf("error decoding private key: %s\n", err.Error())
-				return nil
+				panic(err)
 			}
 
 			key, err := ssh.ParsePrivateKey(decodedPrivateKey)
 			if err != nil {
 				fmt.Printf("error parsing private key: %s\n", err.Error())
-				return nil
+				panic(err)
 			}
 
 			return ssh.PublicKeys(key)
@@ -80,7 +80,7 @@ func NewSSHTunnel(config SSHTunnelConfig) SSHTunnelService {
 
 	if err != nil {
 		fmt.Printf("error creating tunnel: %s\n", err.Error())
-		return nil
+		panic(err)
 	}
 
 	return &SSHTunnel{
