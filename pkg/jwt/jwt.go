@@ -78,9 +78,10 @@ type ParseUnverifiedResponse struct {
 }
 
 type NewJwtServiceParams struct {
-	Redis      redis.RedisService
-	PublicKey  string
-	PrivateKey string
+	Redis                redis.RedisService
+	PublicKey            string
+	PrivateKey           string
+	PrivateKeyPassphrase string
 }
 
 func NewJwtService(p NewJwtServiceParams) JwtService {
@@ -91,10 +92,19 @@ func NewJwtService(p NewJwtServiceParams) JwtService {
 		panic(err)
 	}
 
-	privateKey, err := go_jwt.ParseRSAPrivateKeyFromPEM([]byte(p.PrivateKey))
-	if err != nil {
-		log.Errorf("[JWT][NewJwtService] error parse private key: %v", err)
-		panic(err)
+	privateKey := &rsa.PrivateKey{}
+	if p.PrivateKeyPassphrase != "" {
+		privateKey, err = go_jwt.ParseRSAPrivateKeyFromPEMWithPassword([]byte(p.PrivateKey), p.PrivateKeyPassphrase)
+		if err != nil {
+			log.Errorf("[JWT][NewJwtService] error parse private key with passphrase: %v", err)
+			panic(err)
+		}
+	} else {
+		privateKey, err = go_jwt.ParseRSAPrivateKeyFromPEM([]byte(p.PrivateKey))
+		if err != nil {
+			log.Errorf("[JWT][NewJwtService] error parse private key: %v", err)
+			panic(err)
+		}
 	}
 
 	return &jwtService{
