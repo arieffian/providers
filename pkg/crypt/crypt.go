@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	b64 "encoding/base64"
+	"math/big"
 
 	"crypto/md5"
 	"fmt"
@@ -22,6 +23,8 @@ var _ CryptService = (*crypt)(nil)
 
 const (
 	HASHED_PASSWORD_FORMAT = "$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s"
+	ArgonSaltLength        = 16
+	ArgonKeyLength         = 32
 )
 
 type CryptService interface {
@@ -50,28 +53,10 @@ type CryptService interface {
 	MD5(data string) (string, error)
 }
 
-type argon2idParams struct {
-	memory      uint32
-	iterations  uint32
-	parallelism uint8
-	saltLength  uint32
-	keyLength   uint32
-}
-
-type crypt struct {
-	argon2idParams argon2idParams
-}
+type crypt struct{}
 
 func NewCrypt() CryptService {
-	return &crypt{
-		argon2idParams: argon2idParams{
-			memory:      64 * 1024,
-			iterations:  3,
-			parallelism: 2,
-			saltLength:  16,
-			keyLength:   32,
-		},
-	}
+	return &crypt{}
 }
 
 // Hash is a function to hash data using sha256
@@ -101,24 +86,30 @@ func (c *crypt) Base64Decode(data string) (string, error) {
 
 // Decrypt is a function to decrypt data using aes256-gcm
 func (c *crypt) Decrypt(key string, data string) (string, error) {
+	decodedText, err := b64.URLEncoding.DecodeString(data)
+	if err != nil {
+		log.Errorf("[Crypt][Decrypt] error decode base64: %v", err)
+		return "", err
+	}
+
 	keyByte := []byte(key)
-	dataByte := []byte(data)
+	dataByte := []byte(decodedText)
 
 	cipher, err := aes.NewCipher(keyByte)
 	if err != nil {
-		log.Errorf("[Crypt][Encrypt] error create cipher: %v", err)
+		log.Errorf("[Crypt][Decrypt] error create cipher: %v", err)
 		return "", err
 	}
 
 	gcm, err := go_cipher.NewGCM(cipher)
 	if err != nil {
-		log.Errorf("[Crypt][Encrypt] error create gcm: %v", err)
+		log.Errorf("[Crypt][Decrypt] error create gcm: %v", err)
 		return "", err
 	}
 
 	nonceSize := gcm.NonceSize()
 	if len(dataByte) < nonceSize {
-		log.Errorf("[Crypt][Encrypt] error data length less than nonce size")
+		log.Errorf("[Crypt][Decrypt] error data length less than nonce size")
 		return "", fmt.Errorf("error data length less than nonce size")
 	}
 
@@ -126,7 +117,7 @@ func (c *crypt) Decrypt(key string, data string) (string, error) {
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 
 	if err != nil {
-		log.Errorf("[Crypt][Encrypt] error decrypt: %v", err)
+		log.Errorf("[Crypt][Decrypt] error decrypt: %v", err)
 		return "", err
 	}
 
@@ -164,19 +155,40 @@ func (c *crypt) Encrypt(key string, data string) (string, error) {
 
 // PasswordHash is a function to hash password using argon2id
 func (c *crypt) PasswordHash(password string) (string, error) {
-	salt := make([]byte, c.argon2idParams.saltLength)
+	salt := make([]byte, ArgonSaltLength)
 	_, err := rand.Read(salt)
 	if err != nil {
 		log.Errorf("[Crypt][PasswordHash] error generate salt: %v", err)
 		return "", err
 	}
 
-	hash := argon2.IDKey([]byte(password), salt, c.argon2idParams.iterations, c.argon2idParams.memory, c.argon2idParams.parallelism, c.argon2idParams.keyLength)
+	nBigIteration, err := rand.Int(rand.Reader, big.NewInt(int64(3)))
+	if err != nil {
+		log.Errorf("[Crypt][PasswordHash] error generate iterations big number: %v", err)
+		return "", err
+	}
+	iterations := nBigIteration.Int64() + 2
+
+	nBigMemory, err := rand.Int(rand.Reader, big.NewInt(int64(2)))
+	if err != nil {
+		log.Errorf("[Crypt][PasswordHash] error generate memory big number: %v", err)
+		return "", err
+	}
+	memory := (nBigMemory.Int64() + 1) * 64 * 1024
+
+	nBigParallelism, err := rand.Int(rand.Reader, big.NewInt(int64(2)))
+	if err != nil {
+		log.Errorf("[Crypt][PasswordHash] error generate iterations big number: %v", err)
+		return "", err
+	}
+	parallelism := (nBigParallelism.Int64() + 1)
+
+	hash := argon2.IDKey([]byte(password), salt, uint32(iterations), uint32(memory), uint8(parallelism), ArgonKeyLength)
 
 	b64Salt := b64.RawStdEncoding.EncodeToString(salt)
 	b64Hash := b64.RawStdEncoding.EncodeToString(hash)
 
-	encodedHash := fmt.Sprintf(HASHED_PASSWORD_FORMAT, argon2.Version, c.argon2idParams.memory, c.argon2idParams.iterations, c.argon2idParams.parallelism, b64Salt, b64Hash)
+	encodedHash := fmt.Sprintf(HASHED_PASSWORD_FORMAT, argon2.Version, memory, iterations, parallelism, b64Salt, b64Hash)
 
 	base64EncodedHash := b64.RawStdEncoding.EncodeToString([]byte(encodedHash))
 
@@ -210,8 +222,11 @@ func (c *crypt) PasswordVerify(password string, hash string) (bool, error) {
 		return false, fmt.Errorf("incompatible version of argon2")
 	}
 
-	p := &argon2idParams{}
-	_, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", &p.memory, &p.iterations, &p.parallelism)
+	var memory uint32
+	var iterations uint32
+	var parallelism uint8
+
+	_, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", &memory, &iterations, &parallelism)
 	if err != nil {
 		log.Errorf("[Crypt][PasswordVerify] error parse params: %v", err)
 		return false, err
@@ -228,9 +243,9 @@ func (c *crypt) PasswordVerify(password string, hash string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	p.keyLength = uint32(len(hashedPwd))
+	keyLength := uint32(len(hashedPwd))
 
-	hashedInput := argon2.IDKey([]byte(password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
+	hashedInput := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
 
 	if subtle.ConstantTimeCompare(hashedPwd, hashedInput) == 1 {
 		return true, nil
