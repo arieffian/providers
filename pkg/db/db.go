@@ -26,8 +26,9 @@ type DbInstance struct {
 
 func (d *dbManager) CreateDbClient(ctx context.Context) (*DbInstance, error) {
 	db, err := gorm.Open(postgres.Open(d.dbConfig.WriteDsn), &gorm.Config{
-		TranslateError: true,
-		Logger:         logger.Default.LogMode(logger.Info),
+		TranslateError:         true,
+		Logger:                 logger.Default.LogMode(logger.Info),
+		SkipDefaultTransaction: true,
 	})
 	if err != nil {
 		return nil, err

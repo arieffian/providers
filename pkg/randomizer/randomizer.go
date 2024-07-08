@@ -2,7 +2,13 @@ package randomizer
 
 import (
 	"bytes"
-	"math/rand"
+	"math/big"
+
+	"strings"
+
+	"crypto/rand"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,6 +26,7 @@ var _ RandomizerService = (*randomizer)(nil)
 type RandomizerService interface {
 	GenerateRandomString(p GenerateRandomStringParam) string
 	GenerateUUID() string
+	GenerateTrxId(suffix string) string
 }
 
 type randomizer struct{}
@@ -56,7 +63,12 @@ func (r *randomizer) GenerateRandomString(p GenerateRandomStringParam) string {
 	bpool := poolBuff.Bytes()
 	buff := bytes.Buffer{}
 	for buff.Len() < p.Length {
-		buff.WriteByte(bpool[rand.Intn(len(bpool))])
+		nBig, err := rand.Int(rand.Reader, big.NewInt(int64(len(bpool))))
+		if err != nil {
+			return ""
+		}
+		n := nBig.Int64()
+		buff.WriteByte(bpool[n])
 	}
 	return buff.String()
 }
@@ -65,6 +77,27 @@ func (r *randomizer) GenerateUUID() string {
 	return uuid.NewString()
 }
 
-func NewRandomizer() RandomizerService {
+func (r *randomizer) GenerateTrxId(suffix string) string {
+	t := time.Now()
+
+	res := t.Format("20060102")
+
+	h, m, s := t.Clock()
+	ms := t.Nanosecond() / int(time.Millisecond)
+
+	res += fmt.Sprintf("%02d%02d%02d%03d", h, m, s, ms)
+
+	res += "-" + r.GenerateRandomString(GenerateRandomStringParam{
+		Length:             8,
+		UppercaseAlphabets: true,
+		Numbers:            true,
+	})
+
+	suffix = strings.ToUpper(suffix)
+
+	return suffix + res
+}
+
+func NewRandomizer() *randomizer {
 	return &randomizer{}
 }
